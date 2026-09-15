@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#0d0d18">
-<title>Умные крестики-нолики</title>
+<title>Smart Tic-Tac-Toe</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
@@ -25,7 +25,7 @@
   }
   canvas { display: block; touch-action: none; }
 </style>
-<script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
+<script src="/sdk.js"></script>
 <script src="phaser.min.js"></script>
 </head>
 <body>
@@ -123,17 +123,61 @@ const TRANSLATIONS = {
     restartBtn: 'RESTART',
     ticketsCount: (n) => `🎫 Tickets: ${n}`,
     undoDone: 'Move undone'
+  },
+  tr: {
+    title: 'XOX OYUNU',
+    subtitle: 'oyun modunu seç',
+    tab3: '3×3  KLASİK',
+    tab6: '6×6  DÖRT SIRA',
+    card2p: 'İKİ OYUNCU',
+    cardBot: 'BOT İLE OYNA',
+    cardHard: 'ZOR BOT',
+    card2pSub: 'aynı ekranda\niki oyuncu',
+    cardBotSub3: 'bot bazen hata yapar —\nkazanabilirsin',
+    cardBotSub6: 'bot bazen hata yapar —\nşansın var',
+    cardHardSub3: 'bot hatasız —\nsadece beraberlik',
+    cardHardSub6: 'bot çok güçlü —\nyenmeyi dene',
+    statsLine: (w, g, s) => `Kazanma: ${w}    •    Oyun: ${g}    •    En iyi seri: ${s}`,
+    ticketsLineMenu: (n) => `🎫  Bilet: ${n}    (ipucu = 1,5 sn hamleyi vurgular, geri al = hamleyi geri alır)`,
+    rewardBtn: 'REKLAM → +1 BİLET',
+    rewardUnavailable: 'Reklam kullanılamıyor. Bağlantınızı kontrol edip tekrar deneyin.',
+    backMenu: '←  MENÜ',
+    gameTitle2p: 'İKİ OYUNCU',
+    gameTitleBot: 'BOT İLE OYUN',
+    gameTitleHard: 'ZOR BOT',
+    hint2p: (n) => `${n}×${n} tahta • oyuncular sırayla`,
+    hintBot3: 'bot bazen hata yapar — kazanabilirsin',
+    hintBot6: 'bot bazen hata yapar — şansın var',
+    hintHard3: 'bot hatasız — sadece beraberlik',
+    hintHard6: 'bot çok güçlü — yenmeyi dene',
+    goal3: '3 tanesini sırala',
+    goal4: '4 tanesini sırala',
+    youPlayX: '✕ olarak oynuyorsun',
+    xFirst: '✕  ilk oynar',
+    yourTurn: 'Sıra sende',
+    botThinking: 'Bot düşünüyor…',
+    turnX: 'Oyuncu  ✕  sırası',
+    turnO: 'Oyuncu  ○  sırası',
+    winX: 'Oyuncu ✕ kazandı!',
+    winO: 'Oyuncu ○ kazandı!',
+    botWins: 'Bot kazandı 😈\nTekrar dene!',
+    youWin: 'Kazandın! 🎉',
+    draw: 'Berabere! 🤝',
+    hintBtn: '💡 İPUCU',
+    undoBtn: '↩ GERİ AL',
+    restartBtn: 'YENİDEN',
+    ticketsCount: (n) => `🎫 Bilet: ${n}`,
+    undoDone: 'Hamle geri alındı'
   }
 };
 
-// ─── По умолчанию — русский ───────────────────────────────
-let LANG = 'ru';
+let LANG = 'en';
 
 function t(key) {
-  const dict = TRANSLATIONS[LANG] || TRANSLATIONS.ru;
+  const dict = TRANSLATIONS[LANG] || TRANSLATIONS.en;
   const v = dict[key];
   if (v !== undefined) return v;
-  return TRANSLATIONS.ru[key] !== undefined ? TRANSLATIONS.ru[key] : key;
+  return TRANSLATIONS.en[key] !== undefined ? TRANSLATIONS.en[key] : key;
 }
 
 function tf(key, ...args) {
@@ -141,99 +185,98 @@ function tf(key, ...args) {
   return typeof v === 'function' ? v(...args) : v;
 }
 
-/* ======================= VK SDK ======================= */
-let vkReady = false;
+function detectFallbackLang() {
+  const nav = (navigator.language || navigator.userLanguage || 'en')
+    .slice(0, 2).toLowerCase();
+  return TRANSLATIONS[nav] ? nav : 'en';
+}
 
-const SAVE_KEY = 'smart_ttt_save_v1';
+/* ======================= YANDEX SDK ======================= */
+let ysdk = null;
 
 const playerState = {
   totalWins: 0, totalGames: 0, bestStreak: 0, tickets: 0
 };
 
-async function initVKSDK() {
-  if (typeof vkBridge === 'undefined') {
-    console.log('[VK] vkBridge не загружен — локальный режим');
-    return;
-  }
-
-  const result = await Promise.race([
-    vkBridge.send('VKWebAppInit'),
-    new Promise((_, rej) => setTimeout(() => rej(new Error('VK init timeout')), 3000))
-  ]);
-
-  if (!result || !result.result) {
-    throw new Error('VKWebAppInit вернул false');
-  }
-
-  vkReady = true;
-  console.log('[VK] SDK инициализирован');
-
+async function initYandexSDK() {
+  ysdk = await YaGames.init();
+  const sdkLang = ysdk.environment?.i18n?.lang;
+  if (sdkLang && TRANSLATIONS[sdkLang]) LANG = sdkLang;
+  ysdk.features.LoadingAPI?.ready();
   await loadPlayerData();
-
-  try {
-    const user = await vkBridge.send('VKWebAppGetUserInfo');
-    console.log('[VK] Игрок:', user.first_name, user.last_name, '| ID:', user.id);
-  } catch (e) {
-    console.warn('[VK] Не удалось получить профиль:', e);
-  }
+  const player = await ysdk.getPlayer();
+  if (player.isAuthorized()) console.log('[YSDK] Игрок:', player.getName());
 }
 
 async function loadPlayerData() {
-  if (!vkReady) return;
+  if (!ysdk) return;
   try {
-    const result = await vkBridge.send('VKWebAppStorageGet', { keys: [SAVE_KEY] });
-    const raw = result && result.keys ? result.keys[SAVE_KEY] : null;
-    if (raw) {
-      const data = JSON.parse(raw);
-      if (data && typeof data === 'object') {
-        playerState.totalWins  = data.totalWins  || 0;
-        playerState.totalGames = data.totalGames || 0;
-        playerState.bestStreak = data.bestStreak || 0;
-        playerState.tickets    = data.tickets    || 0;
-      }
+    const player = await ysdk.getPlayer();
+    const data = await player.getData(['totalWins', 'totalGames', 'bestStreak', 'tickets']);
+    if (data) {
+      playerState.totalWins = data.totalWins || 0;
+      playerState.totalGames = data.totalGames || 0;
+      playerState.bestStreak = data.bestStreak || 0;
+      playerState.tickets   = data.tickets   || 0;
     }
   } catch (e) {
-    console.warn('[VK] Не удалось загрузить сохранение:', e);
+    console.warn('[YSDK] Не удалось загрузить сохранение:', e);
   }
 }
 
 function savePlayerData() {
-  if (!vkReady) return;
-  vkBridge.send('VKWebAppStorageSet', {
-    key: SAVE_KEY,
-    value: JSON.stringify(playerState)
-  }).catch(e => console.warn('[VK] Ошибка сохранения:', e));
+  if (!ysdk) return;
+  ysdk.getPlayer()
+    .then(player => player.setData(playerState, true))
+    .catch(e => console.warn('[YSDK] Ошибка сохранения:', e));
 }
 
 function showFullscreenAd() {
-  if (!vkReady) {
-    console.log('[VK] Fullscreen (локальный режим)');
-    return;
-  }
-  vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'preloader' })
-    .then(data => console.log('[VK] Fullscreen result:', data))
-    .catch(e => console.warn('[VK] Fullscreen error:', e));
+  if (!ysdk) { console.log('[YSDK] Fullscreen (заглушка)'); return; }
+  ysdk.adv.showFullscreenAdv({
+    callbacks: {
+      onClose: (wasShown) => {
+        console.log('[YSDK] Fullscreen closed, wasShown =', wasShown);
+        ysdk.features.GameplayAPI?.start();
+      },
+      onError: (error) => console.warn('[YSDK] Fullscreen error:', error)
+    }
+  });
 }
 
 function showRewardedAd(onRewarded, onFail) {
-  if (!vkReady) {
-    onFail && onFail('sdk_unavailable');
+  if (!ysdk) { onFail && onFail('sdk_unavailable'); return; }
+  if (!ysdk.adv || typeof ysdk.adv.showRewardedVideo !== 'function') {
+    onFail && onFail('adv_unavailable');
     return;
   }
-  vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'reward' })
-    .then(data => {
-      if (data && data.result) {
-        try { onRewarded && onRewarded(); }
-        catch (e) { console.warn('[VK] Ошибка в onRewarded:', e); }
-      } else {
-        onFail && onFail('no_reward');
+  let rewarded = false;
+  try {
+    ysdk.adv.showRewardedVideo({
+      callbacks: {
+        onOpen: () => { ysdk.features.GameplayAPI?.stop(); },
+        onRewarded: () => {
+          rewarded = true;
+          try { onRewarded && onRewarded(); }
+          catch (e) { console.warn('[YSDK] Ошибка в onRewarded:', e); }
+        },
+        onClose: () => {
+          ysdk.features.GameplayAPI?.start();
+          if (!rewarded) onFail && onFail('closed_without_reward');
+        },
+        onError: (error) => { onFail && onFail('ad_error'); }
       }
-    })
-    .catch(e => {
-      console.warn('[VK] Reward error:', e);
-      onFail && onFail('ad_error');
     });
+  } catch (e) {
+    onFail && onFail('exception');
+  }
 }
+
+document.addEventListener('visibilitychange', () => {
+  if (!ysdk) return;
+  if (document.hidden) ysdk.features.GameplayAPI?.stop();
+  else ysdk.features.GameplayAPI?.start();
+});
 
 /* ======================= НАСТРОЙКИ ======================= */
 const W = 1280, H = 720;
@@ -242,6 +285,14 @@ const BX   = 110;
 const BY   = 100;
 const PANEL_X = 950;
 
+// ── УЛЬТРА-ПЛОТНОСТЬ ───────────────────────────────────────────
+// Считаем требуемую плотность, чтобы внутренний буфер рендера
+// совпадал с физическими пикселями дисплея 1:1.
+//   fitScale      — во сколько раз Phaser.FIT растянет холст по CSS
+//   deviceDPR     — физических пикселей на CSS-пиксель
+//   requiredRes   — сколько нужно пикселей на 1 логический
+//                   пиксель игры, чтобы попасть 1:1 в физические.
+// Минимум 1.5 (для чётких линий), максимум 4 (защита от лагов).
 function computeRenderResolution() {
   const deviceDPR = window.devicePixelRatio || 1;
   const fitScale = Math.min(
@@ -254,6 +305,7 @@ function computeRenderResolution() {
 const DPR = computeRenderResolution();
 console.log('[Render] DPR =', DPR, '| window DPR =', window.devicePixelRatio);
 
+// Точка входа — поддерживаем WebGL для аппаратного MSAA
 const RENDERER = Phaser.WEBGL;
 
 const COLORS = {
@@ -273,6 +325,9 @@ function hexToInt(hex) {
   return Phaser.Display.Color.HexStringToColor(hex).color;
 }
 
+// ── ЧЁТКИЙ ТЕКСТ + ТЕНЬ ────────────────────────────────────────
+// resolution: 4 — рендер текста с 4-кратной плотностью;
+// setShadow    — мягкая тень под текстом для премиальной читки.
 Phaser.Scene.prototype.addText = function (x, y, text, style) {
   style = Object.assign({}, style || {}, { resolution: 4 });
   const obj = this.add.text(x, y, text, style);
@@ -280,6 +335,7 @@ Phaser.Scene.prototype.addText = function (x, y, text, style) {
   return obj;
 };
 
+// ── ГРАДИЕНТНЫЙ ФОН ────────────────────────────────────────────
 function addGradientBackground(scene) {
   const g = scene.add.graphics();
   g.fillGradientStyle(
@@ -553,8 +609,11 @@ class GameScene extends Phaser.Scene {
     this.cell = GRID / this.size;
     this.lines = this.buildLines();
 
+    if (ysdk) ysdk.features.GameplayAPI?.start();
+
     this.makeSmallButton(120, 44, 180, 46, t('backMenu'), () => {
       if (this.botTimer) { this.botTimer.remove(false); this.botTimer = null; }
+      if (ysdk) ysdk.features.GameplayAPI?.stop();
       this.scene.start('Menu');
     });
 
@@ -618,6 +677,7 @@ class GameScene extends Phaser.Scene {
 
     this.makeSmallButton(PANEL_X, 590, 280, 68, t('restartBtn'), () => this.newRound());
 
+    /* ---------- Сетка ---------- */
     const grid = this.add.graphics();
     grid.lineStyle(this.size === 3 ? 6 : 4, 0x3a3a5c, 1);
     for (let i = 1; i < this.size; i++) {
@@ -708,6 +768,7 @@ class GameScene extends Phaser.Scene {
     this.zones.forEach(z => z.setFillStyle(0xffffff, 0));
 
     if (this.ticketsLabel) this.ticketsLabel.setText(this.formatTickets());
+    if (ysdk) ysdk.features.GameplayAPI?.start();
 
     this.updateStatus();
   }
@@ -771,6 +832,7 @@ class GameScene extends Phaser.Scene {
     this.zones[i].setFillStyle(0xffffff, 0);
   }
 
+  /* ---------- X и O со свечением (2 слоя) ---------- */
   makeX(cx, cy) {
     const st = this.markStyle();
     const glowG = this.add.graphics();
@@ -957,6 +1019,7 @@ class GameScene extends Phaser.Scene {
   }
 
   onGameEnd(win) {
+    if (ysdk) ysdk.features.GameplayAPI?.stop();
     if (this.mode !== 'pvp') {
       playerState.totalGames += 1;
       if (win && win.player === this.humanSymbol) {
@@ -982,11 +1045,13 @@ class GameScene extends Phaser.Scene {
     const ext = st.winExt;
 
     this.winGfx.clear();
+    // свечение под линией
     this.winGfx.lineStyle(st.winLw + 10, COLORS.win, 0.25);
     this.winGfx.lineBetween(
       a.cx - ux * ext, a.cy - uy * ext,
       b.cx + ux * ext, b.cy + uy * ext
     );
+    // основная линия
     this.winGfx.lineStyle(st.winLw, COLORS.win, 1);
     this.winGfx.lineBetween(
       a.cx - ux * ext, a.cy - uy * ext,
@@ -1142,21 +1207,17 @@ class GameScene extends Phaser.Scene {
 async function boot() {
   try {
     await Promise.race([
-      initVKSDK(),
-      new Promise((_, rej) => setTimeout(() => rej(new Error('VK SDK timeout')), 3000))
+      initYandexSDK(),
+      new Promise((_, rej) => setTimeout(() => rej(new Error('SDK timeout')), 3000))
     ]);
   } catch (e) {
-    console.warn('[BOOT] VK SDK не ответил:', e.message || e);
+    console.warn('[BOOT] SDK не ответил:', e.message || e);
   }
-
-  // Язык по умолчанию — русский
-  if (!TRANSLATIONS[LANG]) LANG = 'ru';
+  if (!TRANSLATIONS[LANG]) LANG = detectFallbackLang();
   console.log('[BOOT] Итоговый язык:', LANG);
-  console.log('[BOOT] VK готов:', vkReady);
-  console.log('[BOOT] Статистика:', playerState);
 
   new Phaser.Game({
-    type: RENDERER,
+    type: RENDERER,                 // WebGL — аппаратный MSAA
     parent: 'game',
     width: W,
     height: H,
@@ -1171,7 +1232,9 @@ async function boot() {
       antialiasGL: true,
       roundPixels: false,
       pixelArt: false,
-      powerPreference: 'high-performance'
+      powerPreference: 'high-performance',
+      // сглаженные текстуры для максимальной мягкости
+      mipmapFilter: 'LINEAR_MIPMAP_LINEAR'
     },
     input: { activePointers: 1 },
     scene: [MenuScene, GameScene]
