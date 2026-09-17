@@ -7,23 +7,37 @@
 <meta name="theme-color" content="#0d0d18">
 <title>Умные крестики-нолики</title>
 <style>
+<style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     margin: 0; padding: 0;
-    width: 100%; height: 100%;
+    width: 100%;
+    height: 100%;
+    height: 100dvh;              /* динамическая высота — фикс для мобильных */
     background: #0d0d18;
     overflow: hidden;
     position: fixed;
+    inset: 0;                    /* top:0; right:0; bottom:0; left:0 */
     touch-action: manipulation;
     user-select: none;
     -webkit-user-select: none;
     font-family: Arial, sans-serif;
   }
   #game {
-    width: 100%; height: 100%;
-    display: flex; align-items: center; justify-content: center;
+    position: absolute;
+    inset: 0;                    /* растягиваем на весь viewport */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
   }
-  canvas { display: block; touch-action: none; }
+  canvas {
+    display: block;
+    touch-action: none;
+    max-width: 100% !important;  /* страховка от вылезания */
+    max-height: 100% !important;
+  }
+</style>
 </style>
 <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
 <script src="phaser.min.js"></script>
