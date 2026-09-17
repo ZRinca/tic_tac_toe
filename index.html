@@ -12,7 +12,7 @@
     margin: 0; padding: 0;
     width: 100%;
     height: 100%;
-    height: 100dvh;              /* динамическая высота — фикс для мобильных */
+    height: 100dvh;
     background: #0d0d18;
     overflow: hidden;
     position: fixed;
@@ -35,6 +35,24 @@
     touch-action: none;
     max-width: 100% !important;
     max-height: 100% !important;
+  }
+
+  /* ─── Портрет: поворачиваем игру на 90° ─── */
+  @media (orientation: portrait) {
+    html, body {
+      width: 100vh;
+      height: 100vw;
+      overflow: hidden;
+    }
+    #game {
+      position: fixed;
+      top: 0;
+      left: 100vw;
+      width: 100vh;
+      height: 100vw;
+      transform-origin: top left;
+      transform: rotate(90deg);
+    }
   }
 </style>
 <script src="https://unpkg.com/@vkontakte/vk-bridge/dist/browser.min.js"></script>
@@ -138,7 +156,6 @@ const TRANSLATIONS = {
   }
 };
 
-// ─── По умолчанию — русский ───────────────────────────────
 let LANG = 'ru';
 
 function t(key) {
@@ -155,39 +172,23 @@ function tf(key, ...args) {
 
 /* ======================= VK SDK ======================= */
 let vkReady = false;
-
 const SAVE_KEY = 'smart_ttt_save_v1';
-
-const playerState = {
-  totalWins: 0, totalGames: 0, bestStreak: 0, tickets: 0
-};
+const playerState = { totalWins: 0, totalGames: 0, bestStreak: 0, tickets: 0 };
 
 async function initVKSDK() {
-  if (typeof vkBridge === 'undefined') {
-    console.log('[VK] vkBridge не загружен — локальный режим');
-    return;
-  }
-
+  if (typeof vkBridge === 'undefined') { console.log('[VK] локальный режим'); return; }
   const result = await Promise.race([
     vkBridge.send('VKWebAppInit'),
     new Promise((_, rej) => setTimeout(() => rej(new Error('VK init timeout')), 3000))
   ]);
-
-  if (!result || !result.result) {
-    throw new Error('VKWebAppInit вернул false');
-  }
-
+  if (!result || !result.result) throw new Error('VKWebAppInit вернул false');
   vkReady = true;
   console.log('[VK] SDK инициализирован');
-
   await loadPlayerData();
-
   try {
     const user = await vkBridge.send('VKWebAppGetUserInfo');
-    console.log('[VK] Игрок:', user.first_name, user.last_name, '| ID:', user.id);
-  } catch (e) {
-    console.warn('[VK] Не удалось получить профиль:', e);
-  }
+    console.log('[VK] Игрок:', user.first_name, user.last_name);
+  } catch (e) {}
 }
 
 async function loadPlayerData() {
@@ -204,47 +205,29 @@ async function loadPlayerData() {
         playerState.tickets    = data.tickets    || 0;
       }
     }
-  } catch (e) {
-    console.warn('[VK] Не удалось загрузить сохранение:', e);
-  }
+  } catch (e) {}
 }
 
 function savePlayerData() {
   if (!vkReady) return;
   vkBridge.send('VKWebAppStorageSet', {
-    key: SAVE_KEY,
-    value: JSON.stringify(playerState)
-  }).catch(e => console.warn('[VK] Ошибка сохранения:', e));
+    key: SAVE_KEY, value: JSON.stringify(playerState)
+  }).catch(() => {});
 }
 
 function showFullscreenAd() {
-  if (!vkReady) {
-    console.log('[VK] Fullscreen (локальный режим)');
-    return;
-  }
-  vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'preloader' })
-    .then(data => console.log('[VK] Fullscreen result:', data))
-    .catch(e => console.warn('[VK] Fullscreen error:', e));
+  if (!vkReady) return;
+  vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'preloader' }).catch(() => {});
 }
 
 function showRewardedAd(onRewarded, onFail) {
-  if (!vkReady) {
-    onFail && onFail('sdk_unavailable');
-    return;
-  }
+  if (!vkReady) { onFail && onFail('sdk_unavailable'); return; }
   vkBridge.send('VKWebAppShowNativeAds', { ad_format: 'reward' })
     .then(data => {
-      if (data && data.result) {
-        try { onRewarded && onRewarded(); }
-        catch (e) { console.warn('[VK] Ошибка в onRewarded:', e); }
-      } else {
-        onFail && onFail('no_reward');
-      }
+      if (data && data.result) onRewarded && onRewarded();
+      else onFail && onFail('no_reward');
     })
-    .catch(e => {
-      console.warn('[VK] Reward error:', e);
-      onFail && onFail('ad_error');
-    });
+    .catch(() => onFail && onFail('ad_error'));
 }
 
 /* ======================= НАСТРОЙКИ ======================= */
@@ -254,14 +237,10 @@ const BX   = 110;
 const BY   = 100;
 const PANEL_X = 950;
 
-// Ограничиваем разрешение рендера: не более 2× от DPR.
-// Это устраняет «гигантский холст» на мощных телефонах и лаги.
 function computeRenderResolution() {
-  const deviceDPR = window.devicePixelRatio || 1;
-  return Math.min(deviceDPR, 2);
+  return Math.min(window.devicePixelRatio || 1, 2);
 }
 const DPR = computeRenderResolution();
-console.log('[Render] DPR =', DPR, '| window DPR =', window.devicePixelRatio);
 
 const RENDERER = Phaser.WEBGL;
 
@@ -291,10 +270,7 @@ Phaser.Scene.prototype.addText = function (x, y, text, style) {
 
 function addGradientBackground(scene) {
   const g = scene.add.graphics();
-  g.fillGradientStyle(
-    COLORS.bgTop, COLORS.bgTop,
-    COLORS.bgBot, COLORS.bgBot, 1
-  );
+  g.fillGradientStyle(COLORS.bgTop, COLORS.bgTop, COLORS.bgBot, COLORS.bgBot, 1);
   g.fillRect(0, 0, W, H);
   return g;
 }
@@ -302,18 +278,13 @@ function addGradientBackground(scene) {
 /* ======================= МЕНЮ ======================= */
 class MenuScene extends Phaser.Scene {
   constructor() { super('Menu'); }
-
   create() {
     addGradientBackground(this);
-
     this.addText(W / 2, 60, t('title'), {
-      fontFamily: 'Arial Black, Arial, sans-serif',
-      fontSize: '46px', color: '#e8e8f0'
+      fontFamily: 'Arial Black, Arial, sans-serif', fontSize: '46px', color: '#e8e8f0'
     }).setOrigin(0.5);
-
     this.addText(W / 2, 100, t('subtitle'), {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '15px', color: '#5c5c80'
+      fontFamily: 'Arial, sans-serif', fontSize: '15px', color: '#5c5c80'
     }).setOrigin(0.5);
 
     this.currentTab = 3;
@@ -324,46 +295,33 @@ class MenuScene extends Phaser.Scene {
     this.container6 = this.add.container(0, 0);
     this.buildCards(this.container3, 3);
     this.buildCards(this.container6, 6);
-
     this.container6.setVisible(false);
     this.setTabStyle(this.tab3, true);
     this.setTabStyle(this.tab6, false);
 
     this.statsText = this.addText(W / 2, H - 130, this.formatStats(), {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '15px', color: '#7a7a9c'
+      fontFamily: 'Arial, sans-serif', fontSize: '15px', color: '#7a7a9c'
     }).setOrigin(0.5);
-
     this.ticketsText = this.addText(W / 2, H - 100, this.formatTicketsMenu(), {
-      fontFamily: 'Arial Black, Arial, sans-serif',
-      fontSize: '17px', color: '#ffd166'
+      fontFamily: 'Arial Black, Arial, sans-serif', fontSize: '17px', color: '#ffd166'
     }).setOrigin(0.5);
-
     this.makeRewardButton();
   }
-
   formatStats() {
-    return tf('statsLine',
-      playerState.totalWins, playerState.totalGames, playerState.bestStreak);
+    return tf('statsLine', playerState.totalWins, playerState.totalGames, playerState.bestStreak);
   }
-
-  formatTicketsMenu() {
-    return tf('ticketsLineMenu', playerState.tickets);
-  }
+  formatTicketsMenu() { return tf('ticketsLineMenu', playerState.tickets); }
 
   makeRewardButton() {
     const x = W / 2, y = H - 55;
     const container = this.add.container(x, y);
-    const bg = this.add.rectangle(0, 0, 520, 52, 0x2a2a1a)
-      .setStrokeStyle(3, COLORS.gold);
+    const bg = this.add.rectangle(0, 0, 520, 52, 0x2a2a1a).setStrokeStyle(3, COLORS.gold);
     const icon = this.addText(-230, 0, '▶', {
       fontFamily: 'Arial, sans-serif', fontSize: '22px', color: '#ffd166'
     }).setOrigin(0.5);
     const label = this.addText(20, 0, t('rewardBtn'), {
-      fontFamily: 'Arial Black, Arial, sans-serif',
-      fontSize: '15px', color: '#ffd166'
+      fontFamily: 'Arial Black, Arial, sans-serif', fontSize: '15px', color: '#ffd166'
     }).setOrigin(0.5);
-
     container.add([bg, icon, label]);
 
     let busy = false;
@@ -373,74 +331,48 @@ class MenuScene extends Phaser.Scene {
     bg.on('pointerdown', () => {
       if (busy) return;
       busy = true;
-      bg.setFillStyle(0x1a1a10);
-      bg.setStrokeStyle(3, 0x666650);
-      label.setColor('#666650');
-      icon.setColor('#666650');
+      bg.setFillStyle(0x1a1a10).setStrokeStyle(3, 0x666650);
+      label.setColor('#666650'); icon.setColor('#666650');
       this.tweens.add({ targets: container, scale: 0.95, duration: 70, yoyo: true });
-
       const unlock = () => {
         busy = false;
-        bg.setFillStyle(0x2a2a1a);
-        bg.setStrokeStyle(3, COLORS.gold);
-        label.setColor('#ffd166');
-        icon.setColor('#ffd166');
+        bg.setFillStyle(0x2a2a1a).setStrokeStyle(3, COLORS.gold);
+        label.setColor('#ffd166'); icon.setColor('#ffd166');
       };
-
       showRewardedAd(
         () => {
           playerState.tickets += 1;
           savePlayerData();
           this.ticketsText.setText(this.formatTicketsMenu());
-          this.tweens.add({
-            targets: this.ticketsText, scale: 1.2, duration: 140, yoyo: true
-          });
+          this.tweens.add({ targets: this.ticketsText, scale: 1.2, duration: 140, yoyo: true });
           unlock();
         },
-        (reason) => {
-          unlock();
-          this.showToast(t('rewardUnavailable'));
-          console.log('[Menu] Награда не выдана, причина:', reason);
-        }
+        () => { unlock(); this.showToast(t('rewardUnavailable')); }
       );
     });
   }
 
   showToast(text) {
-    const y = H - 130;
-    const toast = this.addText(W / 2, y, text, {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '15px', color: '#ff7b72',
-      backgroundColor: '#1a1a2a',
-      padding: { x: 18, y: 10 }
+    const toast = this.addText(W / 2, H - 130, text, {
+      fontFamily: 'Arial, sans-serif', fontSize: '15px', color: '#ff7b72',
+      backgroundColor: '#1a1a2a', padding: { x: 18, y: 10 }
     }).setOrigin(0.5).setAlpha(0);
-
     this.tweens.add({
       targets: toast, alpha: 1, duration: 200,
-      onComplete: () => {
-        this.time.delayedCall(2000, () => {
-          this.tweens.add({
-            targets: toast, alpha: 0, duration: 250,
-            onComplete: () => toast.destroy()
-          });
-        });
-      }
+      onComplete: () => this.time.delayedCall(2000, () => {
+        this.tweens.add({ targets: toast, alpha: 0, duration: 250, onComplete: () => toast.destroy() });
+      })
     });
   }
 
   makeTab(x, y, label, onClick) {
     const container = this.add.container(x, y);
-    const bg = this.add.rectangle(0, 0, 340, 54, COLORS.panel)
-      .setStrokeStyle(3, COLORS.border);
+    const bg = this.add.rectangle(0, 0, 340, 54, COLORS.panel).setStrokeStyle(3, COLORS.border);
     const text = this.addText(0, 0, label, {
-      fontFamily: 'Arial Black, Arial, sans-serif',
-      fontSize: '19px', color: '#7a7a9c'
+      fontFamily: 'Arial Black, Arial, sans-serif', fontSize: '19px', color: '#7a7a9c'
     }).setOrigin(0.5);
-
     container.add([bg, text]);
-    container.bg = bg;
-    container.text = text;
-
+    container.bg = bg; container.text = text;
     bg.setInteractive({ useHandCursor: true });
     bg.on('pointerdown', onClick);
     return container;
@@ -448,12 +380,10 @@ class MenuScene extends Phaser.Scene {
 
   setTabStyle(tab, active) {
     if (active) {
-      tab.bg.setFillStyle(COLORS.panelH);
-      tab.bg.setStrokeStyle(3, hexToInt('#4fc3f7'));
+      tab.bg.setFillStyle(COLORS.panelH).setStrokeStyle(3, hexToInt('#4fc3f7'));
       tab.text.setColor('#e8e8f0');
     } else {
-      tab.bg.setFillStyle(COLORS.panel);
-      tab.bg.setStrokeStyle(3, COLORS.border);
+      tab.bg.setFillStyle(COLORS.panel).setStrokeStyle(3, COLORS.border);
       tab.text.setColor('#7a7a9c');
     }
   }
@@ -472,59 +402,38 @@ class MenuScene extends Phaser.Scene {
     const totalW = cardW * 3 + gap * 2;
     const startX = (W - totalW) / 2 + cardW / 2;
     const cy = 430;
-
     const cards = [
-      { title: t('card2p'), sub: t('card2pSub'),
-        accent: '#4fc3f7', mode: 'pvp' },
-      { title: t('cardBot'),
-        sub: size === 3 ? t('cardBotSub3') : t('cardBotSub6'),
-        accent: '#ffd166', mode: 'bot' },
-      { title: t('cardHard'),
-        sub: size === 3 ? t('cardHardSub3') : t('cardHardSub6'),
-        accent: '#ff7b72', mode: 'hard' }
+      { title: t('card2p'), sub: t('card2pSub'), accent: '#4fc3f7', mode: 'pvp' },
+      { title: t('cardBot'), sub: size === 3 ? t('cardBotSub3') : t('cardBotSub6'), accent: '#ffd166', mode: 'bot' },
+      { title: t('cardHard'), sub: size === 3 ? t('cardHardSub3') : t('cardHardSub6'), accent: '#ff7b72', mode: 'hard' }
     ];
-
     cards.forEach((c, i) => {
-      const x = startX + i * (cardW + gap);
-      container.add(this.makeCard(x, cy, cardW, cardH, c.title, c.sub, c.accent, c.mode, size));
+      container.add(this.makeCard(startX + i * (cardW + gap), cy, cardW, cardH, c.title, c.sub, c.accent, c.mode, size));
     });
   }
 
   makeCard(x, y, w, h, title, subtitle, accent, mode, size) {
     const container = this.add.container(x, y);
     const accentInt = hexToInt(accent);
-
-    const bg = this.add.rectangle(0, 0, w, h, COLORS.panel)
-      .setStrokeStyle(3, COLORS.border);
+    const bg = this.add.rectangle(0, 0, w, h, COLORS.panel).setStrokeStyle(3, COLORS.border);
     const bar = this.add.rectangle(0, -h / 2 + 14, w - 28, 6, accentInt);
     const t2 = this.addText(0, -40, title, {
-      fontFamily: 'Arial Black, Arial, sans-serif',
-      fontSize: '24px', color: '#e8e8f0', align: 'center'
+      fontFamily: 'Arial Black, Arial, sans-serif', fontSize: '24px', color: '#e8e8f0', align: 'center'
     }).setOrigin(0.5);
     const s = this.addText(0, 30, subtitle, {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '16px', color: '#8a8aa8',
-      align: 'center', lineSpacing: 6
+      fontFamily: 'Arial, sans-serif', fontSize: '16px', color: '#8a8aa8', align: 'center', lineSpacing: 6
     }).setOrigin(0.5);
-
     container.add([bg, bar, t2, s]);
 
     bg.setInteractive({ useHandCursor: true });
-    bg.on('pointerover', () => {
-      bg.setFillStyle(COLORS.panelH);
-      bg.setStrokeStyle(3, accentInt);
-    });
-    bg.on('pointerout', () => {
-      bg.setFillStyle(COLORS.panel);
-      bg.setStrokeStyle(3, COLORS.border);
-    });
+    bg.on('pointerover', () => bg.setFillStyle(COLORS.panelH).setStrokeStyle(3, accentInt));
+    bg.on('pointerout',  () => bg.setFillStyle(COLORS.panel).setStrokeStyle(3, COLORS.border));
     bg.on('pointerdown', () => {
       this.tweens.add({
         targets: container, scale: 0.95, duration: 70, yoyo: true,
         onComplete: () => this.scene.start('Game', { mode, size })
       });
     });
-
     return container;
   }
 }
@@ -532,33 +441,19 @@ class MenuScene extends Phaser.Scene {
 /* ======================= ИГРА ======================= */
 class GameScene extends Phaser.Scene {
   constructor() { super('Game'); }
-
   init(data) {
     this.mode = (data && data.mode) || 'pvp';
     this.size = (data && data.size) || 3;
     this.winLen = this.size === 3 ? 3 : 4;
-
-    if (this.mode === 'pvp') {
-      this.humanSymbol = null;
-      this.botSymbol   = null;
-    } else {
-      this.humanSymbol = 'X';
-      this.botSymbol   = 'O';
-    }
+    if (this.mode === 'pvp') { this.humanSymbol = null; this.botSymbol = null; }
+    else { this.humanSymbol = 'X'; this.botSymbol = 'O'; }
   }
-
   create() {
     addGradientBackground(this);
-
-    this.roundId  = 0;
-    this.botTimer = null;
-    this.marks    = [];
-    this.history  = [];
+    this.roundId = 0; this.botTimer = null; this.marks = []; this.history = [];
     this.totalCells = this.size * this.size;
-    this.board    = new Array(this.totalCells).fill(null);
-    this.over     = false;
-    this.locked   = false;
-
+    this.board = new Array(this.totalCells).fill(null);
+    this.over = false; this.locked = false;
     this.cell = GRID / this.size;
     this.lines = this.buildLines();
 
@@ -568,35 +463,22 @@ class GameScene extends Phaser.Scene {
     });
 
     let title = '', hint = '';
-    if (this.mode === 'pvp') {
-      title = t('gameTitle2p'); hint = tf('hint2p', this.size);
-    } else if (this.mode === 'bot') {
-      title = t('gameTitleBot');
-      hint  = this.size === 3 ? t('hintBot3') : t('hintBot6');
-    } else {
-      title = t('gameTitleHard');
-      hint  = this.size === 3 ? t('hintHard3') : t('hintHard6');
-    }
+    if (this.mode === 'pvp') { title = t('gameTitle2p'); hint = tf('hint2p', this.size); }
+    else if (this.mode === 'bot') { title = t('gameTitleBot'); hint = this.size === 3 ? t('hintBot3') : t('hintBot6'); }
+    else { title = t('gameTitleHard'); hint = this.size === 3 ? t('hintHard3') : t('hintHard6'); }
 
     this.addText(PANEL_X, 130, title, {
-      fontFamily: 'Arial Black, Arial, sans-serif',
-      fontSize: '30px', color: '#e8e8f0', align: 'center'
+      fontFamily: 'Arial Black, Arial, sans-serif', fontSize: '30px', color: '#e8e8f0', align: 'center'
     }).setOrigin(0.5);
-
     this.addText(PANEL_X, 178, hint, {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '15px', color: '#5c5c80', align: 'center',
+      fontFamily: 'Arial, sans-serif', fontSize: '15px', color: '#5c5c80', align: 'center',
       wordWrap: { width: 460 }
     }).setOrigin(0.5);
-
     this.addText(PANEL_X, 240, this.size === 3 ? t('goal3') : t('goal4'), {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '17px', color: '#8a8aa8'
+      fontFamily: 'Arial, sans-serif', fontSize: '17px', color: '#8a8aa8'
     }).setOrigin(0.5);
-
     this.addText(PANEL_X, 272, this.mode === 'pvp' ? t('xFirst') : t('youPlayX'), {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '16px', color: '#8a8aa8'
+      fontFamily: 'Arial, sans-serif', fontSize: '16px', color: '#8a8aa8'
     }).setOrigin(0.5);
 
     const divider = this.add.graphics();
@@ -604,27 +486,18 @@ class GameScene extends Phaser.Scene {
     divider.lineBetween(PANEL_X - 230, 305, PANEL_X + 230, 305);
 
     this.statusText = this.addText(PANEL_X, 380, '', {
-      fontFamily: 'Arial, sans-serif',
-      fontSize: '28px', color: '#8a8aa8', align: 'center',
+      fontFamily: 'Arial, sans-serif', fontSize: '28px', color: '#8a8aa8', align: 'center',
       wordWrap: { width: 460 }, lineSpacing: 8
     }).setOrigin(0.5);
 
-    this.hintBtn = null;
-    this.undoBtn = null;
-    this.ticketsLabel = null;
-
+    this.hintBtn = null; this.undoBtn = null; this.ticketsLabel = null;
     if (this.mode !== 'pvp') {
-      this.hintBtn = this.makeSmallButton(PANEL_X - 75, 455, 140, 56,
-        t('hintBtn'), () => this.useHint());
-      this.undoBtn = this.makeSmallButton(PANEL_X + 75, 455, 140, 56,
-        t('undoBtn'), () => this.useUndo());
-
+      this.hintBtn = this.makeSmallButton(PANEL_X - 75, 455, 140, 56, t('hintBtn'), () => this.useHint());
+      this.undoBtn = this.makeSmallButton(PANEL_X + 75, 455, 140, 56, t('undoBtn'), () => this.useUndo());
       this.ticketsLabel = this.addText(PANEL_X, 510, this.formatTickets(), {
-        fontFamily: 'Arial, sans-serif',
-        fontSize: '14px', color: '#ffd166'
+        fontFamily: 'Arial, sans-serif', fontSize: '14px', color: '#ffd166'
       }).setOrigin(0.5);
     }
-
     this.makeSmallButton(PANEL_X, 590, 280, 68, t('restartBtn'), () => this.newRound());
 
     const grid = this.add.graphics();
@@ -639,19 +512,13 @@ class GameScene extends Phaser.Scene {
     this.zones = [];
     for (let i = 0; i < this.totalCells; i++) {
       const { cx, cy } = this.cellCenter(i);
-      const zone = this.add
-        .rectangle(cx, cy, this.cell - 10, this.cell - 10, 0xffffff, 0)
+      const zone = this.add.rectangle(cx, cy, this.cell - 10, this.cell - 10, 0xffffff, 0)
         .setInteractive({ useHandCursor: true });
-
-      zone.on('pointerover', () => {
-        if (this.canPlay(i)) zone.setFillStyle(0xffffff, 0.08);
-      });
+      zone.on('pointerover', () => { if (this.canPlay(i)) zone.setFillStyle(0xffffff, 0.08); });
       zone.on('pointerout', () => zone.setFillStyle(0xffffff, 0));
       zone.on('pointerdown', () => this.onCellClick(i));
-
       this.zones.push(zone);
     }
-
     this.winGfx = this.add.graphics();
     this.newRound();
   }
@@ -659,80 +526,48 @@ class GameScene extends Phaser.Scene {
   buildLines() {
     const n = this.size, w = this.winLen;
     const lines = [];
-    for (let r = 0; r < n; r++)
-      for (let c = 0; c <= n - w; c++) {
-        const line = [];
-        for (let k = 0; k < w; k++) line.push(r * n + c + k);
-        lines.push(line);
-      }
-    for (let r = 0; r <= n - w; r++)
-      for (let c = 0; c < n; c++) {
-        const line = [];
-        for (let k = 0; k < w; k++) line.push((r + k) * n + c);
-        lines.push(line);
-      }
-    for (let r = 0; r <= n - w; r++)
-      for (let c = 0; c <= n - w; c++) {
-        const line = [];
-        for (let k = 0; k < w; k++) line.push((r + k) * n + c + k);
-        lines.push(line);
-      }
-    for (let r = 0; r <= n - w; r++)
-      for (let c = w - 1; c < n; c++) {
-        const line = [];
-        for (let k = 0; k < w; k++) line.push((r + k) * n + c - k);
-        lines.push(line);
-      }
+    for (let r = 0; r < n; r++) for (let c = 0; c <= n - w; c++) {
+      const line = []; for (let k = 0; k < w; k++) line.push(r * n + c + k); lines.push(line);
+    }
+    for (let r = 0; r <= n - w; r++) for (let c = 0; c < n; c++) {
+      const line = []; for (let k = 0; k < w; k++) line.push((r + k) * n + c); lines.push(line);
+    }
+    for (let r = 0; r <= n - w; r++) for (let c = 0; c <= n - w; c++) {
+      const line = []; for (let k = 0; k < w; k++) line.push((r + k) * n + c + k); lines.push(line);
+    }
+    for (let r = 0; r <= n - w; r++) for (let c = w - 1; c < n; c++) {
+      const line = []; for (let k = 0; k < w; k++) line.push((r + k) * n + c - k); lines.push(line);
+    }
     return lines;
   }
 
   cellCenter(i) {
-    const r = Math.floor(i / this.size);
-    const c = i % this.size;
-    return {
-      cx: BX + c * this.cell + this.cell / 2,
-      cy: BY + r * this.cell + this.cell / 2
-    };
+    const r = Math.floor(i / this.size), c = i % this.size;
+    return { cx: BX + c * this.cell + this.cell / 2, cy: BY + r * this.cell + this.cell / 2 };
   }
-
   markStyle() {
     if (this.size === 3) return { p: 42, lw: 16, r: 46, winLw: 12, winExt: 46 };
     return { p: 20, lw: 8, r: 24, winLw: 8, winExt: 24 };
   }
-
   newRound() {
     this.roundId++;
     if (this.botTimer) { this.botTimer.remove(false); this.botTimer = null; }
-
     this.board = new Array(this.totalCells).fill(null);
-    this.over = false;
-    this.locked = false;
-    this.currentPlayer = 'X';
-    this.history = [];
-
+    this.over = false; this.locked = false;
+    this.currentPlayer = 'X'; this.history = [];
     if (this.marks) this.marks.forEach(m => m && m.destroy());
     this.marks = new Array(this.totalCells).fill(null);
-
     this.winGfx.clear();
     this.zones.forEach(z => z.setFillStyle(0xffffff, 0));
-
     if (this.ticketsLabel) this.ticketsLabel.setText(this.formatTickets());
-
     this.updateStatus();
   }
-
   updateStatus() {
     if (this.mode === 'pvp') {
-      if (this.currentPlayer === 'X') {
-        this.statusText.setText(t('turnX')).setColor('#4fc3f7');
-      } else {
-        this.statusText.setText(t('turnO')).setColor('#ff7b72');
-      }
-    } else {
-      this.statusText.setText(t('yourTurn')).setColor('#e8e8f0');
-    }
+      if (this.currentPlayer === 'X') this.statusText.setText(t('turnX')).setColor('#4fc3f7');
+      else this.statusText.setText(t('turnO')).setColor('#ff7b72');
+    } else this.statusText.setText(t('yourTurn')).setColor('#e8e8f0');
   }
-
   canPlay(i) { return !this.over && !this.locked && !this.board[i]; }
 
   onCellClick(i) {
@@ -754,7 +589,6 @@ class GameScene extends Phaser.Scene {
       this.botMove();
     });
   }
-
   botMove() {
     const idx = this.bestMove();
     if (idx >= 0) this.place(idx, this.botSymbol);
@@ -762,24 +596,16 @@ class GameScene extends Phaser.Scene {
     if (this.finishIfOver()) return;
     this.statusText.setText(t('yourTurn')).setColor('#e8e8f0');
   }
-
   place(i, player) {
     this.board[i] = player;
     this.history.push({ idx: i, player });
-
     const { cx, cy } = this.cellCenter(i);
     const mark = player === 'X' ? this.makeX(cx, cy) : this.makeO(cx, cy);
-
     mark.setScale(0).setAlpha(0);
-    this.tweens.add({
-      targets: mark, scale: 1, alpha: 1,
-      duration: 200, ease: 'Back.easeOut'
-    });
-
+    this.tweens.add({ targets: mark, scale: 1, alpha: 1, duration: 200, ease: 'Back.easeOut' });
     this.marks[i] = mark;
     this.zones[i].setFillStyle(0xffffff, 0);
   }
-
   makeX(cx, cy) {
     const st = this.markStyle();
     const glowG = this.add.graphics();
@@ -788,90 +614,60 @@ class GameScene extends Phaser.Scene {
     glowG.moveTo(-st.p, -st.p); glowG.lineTo(st.p, st.p);
     glowG.moveTo(st.p, -st.p);  glowG.lineTo(-st.p, st.p);
     glowG.strokePath();
-
     const g = this.add.graphics();
     g.lineStyle(st.lw, COLORS.x, 1);
     g.beginPath();
     g.moveTo(-st.p, -st.p); g.lineTo(st.p, st.p);
     g.moveTo(st.p, -st.p);  g.lineTo(-st.p, st.p);
     g.strokePath();
-
     return this.add.container(cx, cy, [glowG, g]);
   }
-
   makeO(cx, cy) {
     const st = this.markStyle();
     const glowG = this.add.graphics();
     glowG.lineStyle(st.lw + 10, COLORS.o, 0.18);
     glowG.strokeCircle(0, 0, st.r);
-
     const g = this.add.graphics();
     g.lineStyle(st.lw, COLORS.o, 1);
     g.strokeCircle(0, 0, st.r);
-
     return this.add.container(cx, cy, [glowG, g]);
   }
-
   formatTickets() { return tf('ticketsCount', playerState.tickets); }
   updateTickets() { if (this.ticketsLabel) this.ticketsLabel.setText(this.formatTickets()); }
 
   useHint() {
-    if (this.mode === 'pvp') return;
-    if (this.over || this.locked) return;
+    if (this.mode === 'pvp' || this.over || this.locked) return;
     if (this.board.every(v => v)) return;
     if (playerState.tickets < 1) return;
-
     const idx = this.findBestMoveFor(this.humanSymbol, this.botSymbol);
     if (idx < 0) return;
-
-    playerState.tickets -= 1;
-    savePlayerData();
-    this.updateTickets();
-
+    playerState.tickets -= 1; savePlayerData(); this.updateTickets();
     const { cx, cy } = this.cellCenter(idx);
     const size = this.cell - 14;
-
     const glow = this.add.rectangle(cx, cy, size, size, 0x4fc3f7, 0.28).setDepth(1000);
     const border = this.add.rectangle(cx, cy, size, size, 0x000000, 0)
       .setStrokeStyle(4, 0x4fc3f7, 1).setDepth(1001);
-
     glow.setAlpha(0); border.setAlpha(0);
     this.tweens.add({
       targets: [glow, border], alpha: 1, duration: 150,
-      onComplete: () => {
-        this.time.delayedCall(1200, () => {
-          this.tweens.add({
-            targets: [glow, border], alpha: 0, duration: 150,
-            onComplete: () => { glow.destroy(); border.destroy(); }
-          });
-        });
-      }
+      onComplete: () => this.time.delayedCall(1200, () => {
+        this.tweens.add({ targets: [glow, border], alpha: 0, duration: 150,
+          onComplete: () => { glow.destroy(); border.destroy(); } });
+      })
     });
   }
-
   useUndo() {
-    if (this.mode === 'pvp') return;
-    if (this.over || this.locked) return;
-    if (playerState.tickets < 1) return;
-    if (this.history.length < 2) return;
-
-    const lastBot   = this.history[this.history.length - 1];
+    if (this.mode === 'pvp' || this.over || this.locked) return;
+    if (playerState.tickets < 1 || this.history.length < 2) return;
+    const lastBot = this.history[this.history.length - 1];
     const lastHuman = this.history[this.history.length - 2];
     if (lastBot.player !== this.botSymbol || lastHuman.player !== this.humanSymbol) return;
-
-    playerState.tickets -= 1;
-    savePlayerData();
-    this.updateTickets();
-
+    playerState.tickets -= 1; savePlayerData(); this.updateTickets();
     [lastBot, lastHuman].forEach(m => {
-      if (this.marks[m.idx]) {
-        this.marks[m.idx].destroy();
-        this.marks[m.idx] = null;
-      }
+      if (this.marks[m.idx]) { this.marks[m.idx].destroy(); this.marks[m.idx] = null; }
       this.board[m.idx] = null;
     });
     this.history.length -= 2;
-
     this.statusText.setText(t('undoDone')).setColor('#8a8aa8');
     this.time.delayedCall(600, () => { if (!this.over) this.updateStatus(); });
   }
@@ -908,7 +704,6 @@ class GameScene extends Phaser.Scene {
     }
     return bestIdx;
   }
-
   minimaxGeneric(board, current, mePlayer, oppPlayer, depth) {
     if (this.checkWin(board, mePlayer))  return 10 - depth;
     if (this.checkWin(board, oppPlayer)) return depth - 10;
@@ -925,23 +720,18 @@ class GameScene extends Phaser.Scene {
     }
     return best;
   }
-
   checkWin(board, player) {
     for (const line of this.lines) {
       let ok = true;
-      for (const idx of line) {
-        if (board[idx] !== player) { ok = false; break; }
-      }
+      for (const idx of line) if (board[idx] !== player) { ok = false; break; }
       if (ok) return line;
     }
     return null;
   }
-
   finishIfOver() {
     const xLine = this.checkWin(this.board, 'X');
     const oLine = this.checkWin(this.board, 'O');
-    const win = xLine ? { player: 'X', line: xLine }
-             : oLine ? { player: 'O', line: oLine } : null;
+    const win = xLine ? { player: 'X', line: xLine } : oLine ? { player: 'O', line: oLine } : null;
     if (win) {
       this.over = true;
       this.drawWinLine(win.line);
@@ -964,7 +754,6 @@ class GameScene extends Phaser.Scene {
     }
     return false;
   }
-
   onGameEnd(win) {
     if (this.mode !== 'pvp') {
       playerState.totalGames += 1;
@@ -976,11 +765,8 @@ class GameScene extends Phaser.Scene {
       }
       savePlayerData();
     }
-    if (this.mode !== 'pvp') {
-      this.time.delayedCall(1200, () => showFullscreenAd());
-    }
+    if (this.mode !== 'pvp') this.time.delayedCall(1200, () => showFullscreenAd());
   }
-
   drawWinLine(line) {
     const st = this.markStyle();
     const a = this.cellCenter(line[0]);
@@ -989,32 +775,20 @@ class GameScene extends Phaser.Scene {
     const len = Math.hypot(dx, dy) || 1;
     const ux = dx / len, uy = dy / len;
     const ext = st.winExt;
-
     this.winGfx.clear();
     this.winGfx.lineStyle(st.winLw + 10, COLORS.win, 0.25);
-    this.winGfx.lineBetween(
-      a.cx - ux * ext, a.cy - uy * ext,
-      b.cx + ux * ext, b.cy + uy * ext
-    );
+    this.winGfx.lineBetween(a.cx - ux * ext, a.cy - uy * ext, b.cx + ux * ext, b.cy + uy * ext);
     this.winGfx.lineStyle(st.winLw, COLORS.win, 1);
-    this.winGfx.lineBetween(
-      a.cx - ux * ext, a.cy - uy * ext,
-      b.cx + ux * ext, b.cy + uy * ext
-    );
-
+    this.winGfx.lineBetween(a.cx - ux * ext, a.cy - uy * ext, b.cx + ux * ext, b.cy + uy * ext);
     this.children.bringToTop(this.winGfx);
     this.winGfx.setAlpha(0);
     this.tweens.add({ targets: this.winGfx, alpha: 1, duration: 250 });
   }
-
   emptyCells() {
     const empty = [];
-    for (let i = 0; i < this.totalCells; i++) {
-      if (!this.board[i]) empty.push(i);
-    }
+    for (let i = 0; i < this.totalCells; i++) if (!this.board[i]) empty.push(i);
     return empty;
   }
-
   bestMove() {
     const empty = this.emptyCells();
     if (!empty.length) return -1;
@@ -1035,7 +809,6 @@ class GameScene extends Phaser.Scene {
     if (this.size === 3) return this.bestMove3x3();
     return this.mode === 'hard' ? this.bestMove6x6Deep() : this.bestMove6x6Greedy();
   }
-
   minimax3(board, player, depth) {
     if (this.checkWin(board, this.botSymbol))   return 10 - depth;
     if (this.checkWin(board, this.humanSymbol)) return depth - 10;
@@ -1052,7 +825,6 @@ class GameScene extends Phaser.Scene {
     }
     return best;
   }
-
   bestMove3x3() {
     const empty = this.emptyCells();
     let bestScore = -Infinity, bestIdx = empty[0];
@@ -1064,7 +836,6 @@ class GameScene extends Phaser.Scene {
     }
     return bestIdx;
   }
-
   evaluateBoard(me, opp) {
     let score = 0;
     const W = this.winLen;
@@ -1075,18 +846,17 @@ class GameScene extends Phaser.Scene {
         else if (this.board[idx] === opp) o++;
       }
       if (m > 0 && o > 0) continue;
-      if (m === W)              score += 100000;
-      else if (m === W - 1)     score += 1000;
-      else if (m === W - 2)     score += 50;
-      else if (m === 1)         score += 1;
-      if (o === W)              score -= 100000;
-      else if (o === W - 1)     score -= 1000;
-      else if (o === W - 2)     score -= 50;
-      else if (o === 1)         score -= 1;
+      if (m === W)          score += 100000;
+      else if (m === W - 1) score += 1000;
+      else if (m === W - 2) score += 50;
+      else if (m === 1)     score += 1;
+      if (o === W)          score -= 100000;
+      else if (o === W - 1) score -= 1000;
+      else if (o === W - 2) score -= 50;
+      else if (o === 1)     score -= 1;
     }
     return score;
   }
-
   bestMove6x6Greedy() {
     const empty = this.emptyCells();
     let bestScore = -Infinity, bestIdx = empty[0];
@@ -1098,16 +868,12 @@ class GameScene extends Phaser.Scene {
     }
     return bestIdx;
   }
-
   bestMove6x6Deep() {
     const empty = this.emptyCells();
     let bestScore = -Infinity, bestIdx = empty[0];
     for (const i of empty) {
       this.board[i] = this.botSymbol;
-      if (this.checkWin(this.board, this.botSymbol)) {
-        this.board[i] = null;
-        return i;
-      }
+      if (this.checkWin(this.board, this.botSymbol)) { this.board[i] = null; return i; }
       let worstScore = Infinity;
       for (const j of empty) {
         if (j === i) continue;
@@ -1121,28 +887,19 @@ class GameScene extends Phaser.Scene {
     }
     return bestIdx;
   }
-
   makeSmallButton(x, y, w, h, label, onClick) {
     const container = this.add.container(x, y);
-    const bg = this.add.rectangle(0, 0, w, h, COLORS.panel)
-      .setStrokeStyle(3, COLORS.border);
+    const bg = this.add.rectangle(0, 0, w, h, COLORS.panel).setStrokeStyle(3, COLORS.border);
     const text = this.addText(0, 0, label, {
-      fontFamily: 'Arial Black, Arial, sans-serif',
-      fontSize: '15px', color: '#e8e8f0'
+      fontFamily: 'Arial Black, Arial, sans-serif', fontSize: '15px', color: '#e8e8f0'
     }).setOrigin(0.5);
-
     container.add([bg, text]);
-
     bg.setInteractive({ useHandCursor: true });
     bg.on('pointerover', () => bg.setFillStyle(COLORS.panelH));
     bg.on('pointerout',  () => bg.setFillStyle(COLORS.panel));
     bg.on('pointerdown', () => {
-      this.tweens.add({
-        targets: container, scale: 0.94, duration: 70, yoyo: true,
-        onComplete: onClick
-      });
+      this.tweens.add({ targets: container, scale: 0.94, duration: 70, yoyo: true, onComplete: onClick });
     });
-
     return container;
   }
 }
@@ -1154,15 +911,9 @@ async function boot() {
       initVKSDK(),
       new Promise((_, rej) => setTimeout(() => rej(new Error('VK SDK timeout')), 3000))
     ]);
-  } catch (e) {
-    console.warn('[BOOT] VK SDK не ответил:', e.message || e);
-  }
+  } catch (e) { console.warn('[BOOT] VK SDK не ответил:', e.message || e); }
 
-  // Язык по умолчанию — русский
   if (!TRANSLATIONS[LANG]) LANG = 'ru';
-  console.log('[BOOT] Итоговый язык:', LANG);
-  console.log('[BOOT] VK готов:', vkReady);
-  console.log('[BOOT] Статистика:', playerState);
 
   window.game = new Phaser.Game({
     type: RENDERER,
@@ -1176,8 +927,8 @@ async function boot() {
       width: W,
       height: H,
       parent: 'game',
-      expandParent: false,      // не даём Phaser растягивать родителя
-      resizeInterval: 100       // пересчёт размера каждые 100 мс
+      expandParent: false,
+      resizeInterval: 100
     },
     render: {
       resolution: DPR,
@@ -1191,14 +942,11 @@ async function boot() {
     scene: [MenuScene, GameScene]
   });
 
-  // Корректный пересчёт при повороте экрана / показе адресной строки
   window.addEventListener('orientationchange', () => {
     setTimeout(() => window.dispatchEvent(new Event('resize')), 300);
   });
   window.addEventListener('resize', () => {
-    if (window.game && window.game.scale) {
-      window.game.scale.refresh();
-    }
+    if (window.game && window.game.scale) window.game.scale.refresh();
   });
 }
 
