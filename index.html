@@ -16,7 +16,7 @@
     background: #0d0d18;
     overflow: hidden;
     position: fixed;
-    inset: 0;                    /* top:0; right:0; bottom:0; left:0 */
+    inset: 0;
     touch-action: manipulation;
     user-select: none;
     -webkit-user-select: none;
@@ -24,7 +24,7 @@
   }
   #game {
     position: absolute;
-    inset: 0;                    /* растягиваем на весь viewport */
+    inset: 0;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -33,7 +33,7 @@
   canvas {
     display: block;
     touch-action: none;
-    max-width: 100% !important;  /* страховка от вылезания */
+    max-width: 100% !important;
     max-height: 100% !important;
   }
 </style>
@@ -254,14 +254,11 @@ const BX   = 110;
 const BY   = 100;
 const PANEL_X = 950;
 
+// Ограничиваем разрешение рендера: не более 2× от DPR.
+// Это устраняет «гигантский холст» на мощных телефонах и лаги.
 function computeRenderResolution() {
   const deviceDPR = window.devicePixelRatio || 1;
-  const fitScale = Math.min(
-    window.innerWidth  / W,
-    window.innerHeight / H
-  );
-  const needed = deviceDPR * Math.max(fitScale, 1);
-  return Math.min(Math.max(needed, 1.5), 4);
+  return Math.min(deviceDPR, 2);
 }
 const DPR = computeRenderResolution();
 console.log('[Render] DPR =', DPR, '| window DPR =', window.devicePixelRatio);
@@ -1167,7 +1164,7 @@ async function boot() {
   console.log('[BOOT] VK готов:', vkReady);
   console.log('[BOOT] Статистика:', playerState);
 
-  new Phaser.Game({
+  window.game = new Phaser.Game({
     type: RENDERER,
     parent: 'game',
     width: W,
@@ -1175,7 +1172,12 @@ async function boot() {
     backgroundColor: COLORS.bg,
     scale: {
       mode: Phaser.Scale.FIT,
-      autoCenter: Phaser.Scale.CENTER_BOTH
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+      width: W,
+      height: H,
+      parent: 'game',
+      expandParent: false,      // не даём Phaser растягивать родителя
+      resizeInterval: 100       // пересчёт размера каждые 100 мс
     },
     render: {
       resolution: DPR,
@@ -1187,6 +1189,16 @@ async function boot() {
     },
     input: { activePointers: 1 },
     scene: [MenuScene, GameScene]
+  });
+
+  // Корректный пересчёт при повороте экрана / показе адресной строки
+  window.addEventListener('orientationchange', () => {
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 300);
+  });
+  window.addEventListener('resize', () => {
+    if (window.game && window.game.scale) {
+      window.game.scale.refresh();
+    }
   });
 }
 
