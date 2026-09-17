@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="theme-color" content="#0d0d18">
+<meta name="theme-color" content="#16162a">
 <title>Умные крестики-нолики</title>
 <style>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -13,7 +13,7 @@
     width: 100%;
     height: 100%;
     height: 100dvh;
-    background: #0d0d18;
+    background: #16162a;   /* ← ЕДИНЫЙ ЦВЕТ ФОНА */
     overflow: hidden;
     position: fixed;
     inset: 0;
@@ -29,6 +29,7 @@
     align-items: center;
     justify-content: center;
     overflow: hidden;
+    background: #16162a;   /* ← тот же цвет, чтобы нигде не проглядывало */
   }
   canvas {
     display: block;
@@ -244,10 +245,12 @@ const DPR = computeRenderResolution();
 
 const RENDERER = Phaser.WEBGL;
 
+/* ЕДИНЫЙ ФОН — один цвет на всей странице и в сцене */
+const SOLID_BG = 0x16162a;
+const SOLID_BG_CSS = '#16162a';
+
 const COLORS = {
-  bg:     '#16162a',
-  bgTop:  0x1c1c34,
-  bgBot:  0x0e0e1c,
+  bg:     SOLID_BG_CSS,
   x:      0x4fc3f7,
   o:      0xff7b72,
   win:    0x7cfc00,
@@ -268,9 +271,10 @@ Phaser.Scene.prototype.addText = function (x, y, text, style) {
   return obj;
 };
 
-function addGradientBackground(scene) {
+// Просто однотонная заливка вместо градиента
+function addSolidBackground(scene) {
   const g = scene.add.graphics();
-  g.fillGradientStyle(COLORS.bgTop, COLORS.bgTop, COLORS.bgBot, COLORS.bgBot, 1);
+  g.fillStyle(SOLID_BG, 1);
   g.fillRect(0, 0, W, H);
   return g;
 }
@@ -279,7 +283,8 @@ function addGradientBackground(scene) {
 class MenuScene extends Phaser.Scene {
   constructor() { super('Menu'); }
   create() {
-    addGradientBackground(this);
+    addSolidBackground(this);
+
     this.addText(W / 2, 60, t('title'), {
       fontFamily: 'Arial Black, Arial, sans-serif', fontSize: '46px', color: '#e8e8f0'
     }).setOrigin(0.5);
@@ -449,7 +454,7 @@ class GameScene extends Phaser.Scene {
     else { this.humanSymbol = 'X'; this.botSymbol = 'O'; }
   }
   create() {
-    addGradientBackground(this);
+    addSolidBackground(this);
     this.roundId = 0; this.botTimer = null; this.marks = []; this.history = [];
     this.totalCells = this.size * this.size;
     this.board = new Array(this.totalCells).fill(null);
@@ -920,7 +925,7 @@ async function boot() {
     parent: 'game',
     width: W,
     height: H,
-    backgroundColor: COLORS.bg,
+    backgroundColor: SOLID_BG_CSS,   /* тот же сплошной цвет */
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
